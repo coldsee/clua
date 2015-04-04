@@ -344,8 +344,10 @@ void Player::CalculateMinMaxDamage(WeaponAttackType attType, bool normalized, fl
         if (lvl > 60)
             lvl = 60;
 
-        weapon_mindamage = lvl * 0.85f * att_speed;
-        weapon_maxdamage = lvl * 1.25f * att_speed;
+        weapon_mindamage = GetWeaponDamageRange(attType, MINDAMAGE) * 0.5f * att_speed;
+        weapon_maxdamage = GetWeaponDamageRange(attType, MAXDAMAGE) * 0.5f * att_speed;
+//wwmadd-小德享受一半武器伤害加成        weapon_mindamage = lvl * 0.85f * att_speed;
+//wwmadd-小德享受一半武器伤害加成        weapon_maxdamage = lvl * 1.25f * att_speed;
     }
     else if (!CanUseEquippedWeapon(attType))                // check if player not in form but still can't use weapon (broken/etc)
     {

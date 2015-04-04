@@ -213,7 +213,6 @@ bool Pet::LoadPetFromDB(Player* owner, uint32 petentry, uint32 petnumber, bool c
     {
         case SUMMON_PET:
             petlevel = owner->getLevel();
-            SetPowerType(POWER_MANA); // DIY
             break;
         case HUNTER_PET:
             // loyalty

@@ -1292,10 +1292,6 @@ void Player::Update(uint32 update_diff, uint32 p_time)
     if (pet && !pet->IsWithinDistInMap(this, GetMap()->GetVisibilityDistance()) && (GetCharmGuid() && (pet->GetObjectGuid() != GetCharmGuid())))
         pet->Unsummon(PET_SAVE_REAGENTS, this);
 
-    //DIY
-    if (pet && pet->GetEntry() == 5433 && !pet->IsWithinDistInMap(this, GetMap()->GetVisibilityDistance()))
-        pet->Unsummon(PET_SAVE_REAGENTS, this);
-
     if (IsHasDelayedTeleport())
         TeleportTo(m_teleport_dest, m_teleport_options);
 }
@@ -1786,6 +1782,17 @@ void Player::RemoveFromWorld()
         UnsummonAllTotems();
         RemoveMiniPet();
     }
+
+	// Notifies the client that he has left the raid group.
+	// Only valid when the player is on the transport.
+	if (GetTransport() && GetGroup() && GetGroup()->isRaidGroup())
+	{			
+		WorldPacket data;
+		// For client, sending an empty group list is enough to be ungroup.
+		data.Initialize(SMSG_GROUP_LIST, 24);
+        data << uint64(0) << uint64(0) << uint64(0);
+        m_session->SendPacket(&data);
+	}
 
     for (int i = PLAYER_SLOT_START; i < PLAYER_SLOT_END; ++i)
     {
@@ -6394,6 +6401,27 @@ void Player::DuelComplete(DuelCompleteType type)
         data << duel->opponent->GetName();
         data << GetName();
         SendMessageToSet(&data, true);
+    }
+
+    switch (type)
+    {
+        case DUEL_FLED:
+            // if initiator and opponent are on the same team
+            // or initiator and opponent are not PvP enabled, forcibly stop attacking
+            if (duel->initiator->GetTeam() == duel->opponent->GetTeam())
+            {
+                duel->initiator->AttackStop();
+                duel->opponent->AttackStop();
+            }
+            else
+            {
+                if (!duel->initiator->IsPvP())
+                    duel->initiator->AttackStop();
+                if (!duel->opponent->IsPvP())
+                    duel->opponent->AttackStop();
+            }
+        default:
+            break;
     }
 
     // used by eluna
@@ -11355,6 +11383,8 @@ void Player::SendPreparedGossip(WorldObject* pSource)
 
 void Player::OnGossipSelect(WorldObject* pSource, uint32 gossipListId)
 {
+    if (!pSource)
+        return;
     GossipMenu& gossipmenu = PlayerTalkClass->GetGossipMenu();
 
     if (gossipListId >= gossipmenu.MenuItemCount())
@@ -15209,6 +15239,7 @@ void Player::_SaveInventory()
     {
         sLog.outError("Player::_SaveInventory - one or more errors occurred save aborted!");
         ChatHandler(this).SendSysMessage(LANG_ITEM_SAVE_FAILED);
+		GetSession()->KickPlayer();//Ìß³öisf×´Ì¬£¬·ÀÖ¹¸´ÖÆ
         return;
     }
 
@@ -16700,12 +16731,11 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, 
         return false;
     }
 
-    uint32 price = pProto->BuyPrice * count;
+    uint64 price = pProto->BuyPrice * count;
 
-    // reputation discount
-    price = uint32(floor(price * GetReputationPriceDiscount(pCreature)));
+    price = uint64(floor(price * GetReputationPriceDiscount(pCreature)));
 
-    if (GetMoney() < price)
+    if (GetMoney() < price || price > 2147483646 || price < 0) //·À¹ºÂòÒç³ö
     {
         SendBuyError(BUY_ERR_NOT_ENOUGHT_MONEY, pCreature, item, 0);
         return false;
@@ -16723,7 +16753,7 @@ bool Player::BuyItemFromVendor(ObjectGuid vendorGuid, uint32 item, uint8 count, 
             return false;
         }
 
-        ModifyMoney(-int32(price));
+        ModifyMoney(-int64(price));
 
         pItem = StoreNewItem(dest, item, true);
     }
@@ -18721,7 +18751,8 @@ void Player::LearnTalent(uint32 talentId, uint32 talentRank)
 
     if (CurTalentPoints == 0)
         return;
-
+    if (!isAlive()) //·ÀÁé»ê×´Ì¬¿¨Ìì¸³
+        return;
     if (talentRank >= MAX_TALENT_RANK)
         return;
 
